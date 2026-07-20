@@ -11,8 +11,22 @@ local defaultSettings = {
     autoQuest = true,
     skipDelete = true,
     autoBoP = true,
-    autoSell = true
+    autoSell = true,
+    chatClassColors = true,
+    clickInvite = true,
+    blockDuels = false,         
+    blockGuildInvites = false   
 }
+
+local function ApplyChatColors(enable)
+    local chatTypes = {"SAY", "EMOTE", "YELL", "WHISPER", "GUILD", "OFFICER", "PARTY", "RAID", "RAID_WARNING", "BATTLEGROUND", "BATTLEGROUND_LEADER"}
+    for _, type in ipairs(chatTypes) do
+        ToggleChatColorNamesByClassGroup(enable, type)
+    end
+    for i = 1, 10 do
+        ToggleChatColorNamesByClassGroup(enable, "CHANNEL"..i)
+    end
+end
 
 -- ==========================================
 -- MODULE: Map Tweaks
@@ -27,7 +41,6 @@ local function InitMap()
         WorldMapFrame:SetScale(PawieTweaksDB.scale)
     end
     
-    -- Drag Frame
     local dragFrame = CreateFrame("Frame", nil, WorldMapFrame)
     dragFrame:SetPoint("TOPLEFT", 0, 0)
     dragFrame:SetPoint("TOPRIGHT", 0, 0)
@@ -37,28 +50,12 @@ local function InitMap()
     dragFrame:SetScript("OnDragStart", function() WorldMapFrame:StartMoving() end)
     dragFrame:SetScript("OnDragStop", function() WorldMapFrame:StopMovingOrSizing() end)
 
-    -- Clean UP UI
     if WorldMapZoneMinimapDropDown then WorldMapZoneMinimapDropDown:Hide() end
     if WorldMapZoomOutButton then WorldMapZoomOutButton:Hide() end
     if WorldMapMagnifyingGlassButton then WorldMapMagnifyingGlassButton:Hide() end
     if WorldMapPlayer then WorldMapPlayer:SetScale(1.5) end
 
-    -- Scaling Logic
-    local function MapScale(self, delta)
-        local scale = WorldMapFrame:GetScale() + (delta * 0.1)
-        if scale > 0.5 and scale < 2.5 then
-            WorldMapFrame:SetScale(scale)
-            PawieTweaksDB.scale = scale
-        end
-    end
-    
-    WorldMapFrame:EnableMouseWheel(true)
-    WorldMapFrame:HookScript("OnMouseWheel", MapScale)
-    if WorldMapButton then
-        WorldMapButton:EnableMouseWheel(true)
-        WorldMapButton:HookScript("OnMouseWheel", MapScale)
-    end
-
+    -- Scaling handle (Triangle in bottom right)
     local scaleHandle = CreateFrame("Frame", nil, WorldMapFrame)
     scaleHandle:SetSize(16, 16)
     scaleHandle:SetPoint("BOTTOMRIGHT", -10, 10)
@@ -93,7 +90,6 @@ local function InitMap()
         end
     end)
 
-    -- Fade on Move
     local logicFrame = CreateFrame("Frame", nil, WorldMapFrame)
     local updateTimer = 0
     logicFrame:SetScript("OnUpdate", function(self, elapsed)
@@ -189,7 +185,6 @@ end
 -- MODULE: Quality of Life (QoL)
 -- ==========================================
 local function InitQoL()
-    -- Hide Annoying Errors
     SetCVar("Sound_EnableErrorSpeech", "0")
     local originalAddMessage = UIErrorsFrame.AddMessage
     UIErrorsFrame.AddMessage = function(frame, text, red, green, blue, id)
@@ -202,7 +197,6 @@ local function InitQoL()
         originalAddMessage(frame, text, red, green, blue, id)
     end
 
-    -- Chat Copy Tool
     local chatHistory = {}
     local originalChatAddMessage = ChatFrame1.AddMessage
     ChatFrame1.AddMessage = function(frame, text, ...)
@@ -260,7 +254,6 @@ local function InitQoL()
         editBox:HighlightText() 
     end)
 
-    -- Skip "DELETE" typing
     hooksecurefunc("StaticPopup_Show", function(which)
         if which == "DELETE_GOOD_ITEM" and PawieTweaksDB.skipDelete then
             local frame = StaticPopup_FindVisible(which)
@@ -268,7 +261,6 @@ local function InitQoL()
         end
     end)
     
-    -- Auto BoP
     local bopFrame = CreateFrame("Frame")
     bopFrame:RegisterEvent("LOOT_BIND_CONFIRM")
     bopFrame:SetScript("OnEvent", function(self, event, slot)
@@ -278,7 +270,6 @@ local function InitQoL()
         end
     end)
     
-    -- Auto Sell
     local sellFrame = CreateFrame("Frame")
     sellFrame:RegisterEvent("MERCHANT_SHOW")
     sellFrame:SetScript("OnEvent", function()
@@ -301,6 +292,73 @@ local function InitQoL()
             print("|cff00ff00Pawie Tweaks:|r Sold junk for " .. GetCoinTextureString(total) .. ".")
         end
     end)
+
+    ApplyChatColors(PawieTweaksDB.chatClassColors)
+
+    local orig_MerchantItemButton_OnModifiedClick = MerchantItemButton_OnModifiedClick
+    function MerchantItemButton_OnModifiedClick(self, button)
+        if IsAltKeyDown() and button == "LeftButton" then
+            local id = self:GetID()
+            local maxStack = GetMerchantItemMaxStack(id)
+            local _, _, _, quantity = GetMerchantItemInfo(id)
+            if maxStack > 1 then
+                BuyMerchantItem(id, math.floor(maxStack/quantity))
+                return
+            end
+        end
+        orig_MerchantItemButton_OnModifiedClick(self, button)
+    end
+
+    local function ChatInviteFilter(self, event, msg, author, ...)
+        if not PawieTweaksDB.clickInvite then return false, msg, author, ... end
+        local newMsg = string.gsub(msg, "%f[%a]([iI][nN][vV][iI]?[tT]?[eE]?)%f[%A]", "|Hpawieinv:"..author.."|h|cffffff00%1|r|h")
+        return false, newMsg, author, ...
+    end
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_WHISPER", ChatInviteFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_SAY", ChatInviteFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_YELL", ChatInviteFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", ChatInviteFilter)
+
+    local orig_SetItemRef = SetItemRef
+    function SetItemRef(link, text, button, chatFrame)
+        local linkType, target = strsplit(":", link)
+        if linkType == "pawieinv" then
+            InviteUnit(target)
+            print("|cff00ff00Pawie Tweaks:|r Invited " .. target .. ".")
+            return
+        end
+        orig_SetItemRef(link, text, button, chatFrame)
+    end
+
+    local blockFrame = CreateFrame("Frame")
+    blockFrame:RegisterEvent("DUEL_REQUESTED")
+    blockFrame:RegisterEvent("GUILD_INVITE_REQUEST")
+    blockFrame:SetScript("OnEvent", function(self, event, name)
+        local function IsFriend(n)
+            for i = 1, GetNumFriends() do
+                if GetFriendInfo(i) == n then return true end
+            end
+            if IsInGuild() then
+                for i = 1, GetNumGuildMembers() do
+                    local gName = select(1, GetGuildRosterInfo(i))
+                    if gName and strsplit("-", gName) == n then return true end
+                end
+            end
+            return false
+        end
+
+        if not IsFriend(name) then
+            if event == "DUEL_REQUESTED" and PawieTweaksDB.blockDuels then
+                CancelDuel()
+                StaticPopup_Hide("DUEL_REQUESTED")
+                print("|cff00ff00Pawie Tweaks:|r Blocked duel request from " .. tostring(name) .. ".")
+            elseif event == "GUILD_INVITE_REQUEST" and PawieTweaksDB.blockGuildInvites then
+                DeclineGuild()
+                StaticPopup_Hide("GUILD_INVITE")
+                print("|cff00ff00Pawie Tweaks:|r Blocked guild invite from " .. tostring(name) .. ".")
+            end
+        end
+    end)
 end
 
 -- ==========================================
@@ -312,18 +370,41 @@ local function InitMenuAndCommands()
 
     SLASH_PAWIETWEAKS1 = "/pawie"
     SlashCmdList["PAWIETWEAKS"] = function(msg)
-        msg = string.lower(msg)
+        -- Rensar bort eventuella osynliga mellanslag
+        msg = string.lower(msg or "")
+        msg = msg:match("^%s*(.-)%s*$")
+        
         if msg == "fade" then
             PawieTweaksDB.fadeOnMove = not PawieTweaksDB.fadeOnMove
             print("|cff00ff00Pawie Tweaks:|r Fade on move is now " .. (PawieTweaksDB.fadeOnMove and "ON" or "OFF") .. ".")
         elseif msg == "quest" then
             PawieTweaksDB.autoQuest = not PawieTweaksDB.autoQuest
             print("|cff00ff00Pawie Tweaks:|r Auto-Quest is now " .. (PawieTweaksDB.autoQuest and "ON" or "OFF") .. ".")
-        else
+        elseif msg == "duel" then
+            PawieTweaksDB.blockDuels = not PawieTweaksDB.blockDuels
+            print("|cff00ff00Pawie Tweaks:|r Block Duels is now " .. (PawieTweaksDB.blockDuels and "ON" or "OFF") .. ".")
+            if PawieTweaksCBDuel then PawieTweaksCBDuel:SetChecked(PawieTweaksDB.blockDuels) end
+        elseif msg == "ginv" then
+            PawieTweaksDB.blockGuildInvites = not PawieTweaksDB.blockGuildInvites
+            print("|cff00ff00Pawie Tweaks:|r Block Guild Invites is now " .. (PawieTweaksDB.blockGuildInvites and "ON" or "OFF") .. ".")
+            if PawieTweaksCBGinv then PawieTweaksCBGinv:SetChecked(PawieTweaksDB.blockGuildInvites) end
+        elseif msg == "colors" then
+            PawieTweaksDB.chatClassColors = not PawieTweaksDB.chatClassColors
+            ApplyChatColors(PawieTweaksDB.chatClassColors)
+            print("|cff00ff00Pawie Tweaks:|r Chat Class Colors are now " .. (PawieTweaksDB.chatClassColors and "ON" or "OFF") .. ".")
+            if PawieTweaksCBColors then PawieTweaksCBColors:SetChecked(PawieTweaksDB.chatClassColors) end
+        elseif msg == "help" or msg == "" then
+            -- Skrivs ut om man skrivit "/pawie" eller "/pawie help"
             print("|cff00ff00Pawie Tweaks Commands:|r")
             print("/rl - Reloads the UI.")
             print("/pawie fade - Toggles map transparency when moving.")
             print("/pawie quest - Toggles auto-accept/turn-in of quests.")
+            print("/pawie duel - Toggles blocking of duel requests from non-friends.")
+            print("/pawie ginv - Toggles blocking of guild invites from non-friends.")
+            print("/pawie colors - Toggles class colors in the chat.")
+        else
+            -- Skrivs ut om man skrivit t.ex. "/pawie hej"
+            print("|cff00ff00Pawie Tweaks:|r Unknown command. Type /pawie for a list of commands.")
         end
     end
 
@@ -344,36 +425,44 @@ local function InitMenuAndCommands()
     optHeader:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -20)
     optHeader:SetText("Togglable Settings")
 
-    -- Helper to create checkboxes
-    local function CreateCheckbox(name, label, dbKey, relativeTo)
+    local function CreateCheckbox(name, label, dbKey, relativeTo, callback)
         local cb = CreateFrame("CheckButton", name, optionsPanel, "InterfaceOptionsCheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -5)
+        cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -3)
         _G[cb:GetName() .. "Text"]:SetText(label)
         cb:SetScript("OnShow", function(self) self:SetChecked(PawieTweaksDB[dbKey]) end)
-        cb:SetScript("OnClick", function(self) PawieTweaksDB[dbKey] = self:GetChecked() and true or false end)
+        cb:SetScript("OnClick", function(self) 
+            PawieTweaksDB[dbKey] = self:GetChecked() and true or false 
+            if callback then callback(PawieTweaksDB[dbKey]) end
+        end)
         return cb
     end
 
     local cbQuest = CreateCheckbox("PawieTweaksCBQuest", "Auto-Quest (Accepts/Turns in quests. Hold SHIFT to pause)", "autoQuest", optHeader)
-    cbQuest:SetPoint("TOPLEFT", optHeader, "BOTTOMLEFT", 0, -10) -- Adjust first item spacing
+    cbQuest:SetPoint("TOPLEFT", optHeader, "BOTTOMLEFT", 0, -8) 
+    
     local cbFade = CreateCheckbox("PawieTweaksCBFade", "Fade Map on Move (Map becomes transparent when running)", "fadeOnMove", cbQuest)
     local cbDelete = CreateCheckbox("PawieTweaksCBDelete", "Skip 'DELETE' typing (Auto-fills the text for rare items)", "skipDelete", cbFade)
     local cbBoP = CreateCheckbox("PawieTweaksCBBoP", "Auto-Confirm Bind on Pickup (BoP) loot warnings", "autoBoP", cbDelete)
     local cbSell = CreateCheckbox("PawieTweaksCBSell", "Auto-Sell Junk (Sells all grey items when talking to a vendor)", "autoSell", cbBoP)
+    local cbInvite = CreateCheckbox("PawieTweaksCBInvite", "Clickable Invites (Click the word 'inv' in chat to invite a player)", "clickInvite", cbSell)
+    
+    local cbColors = CreateCheckbox("PawieTweaksCBColors", "Class Colors in Chat", "chatClassColors", cbInvite, function(val) ApplyChatColors(val) end)
+    local cbDuel = CreateCheckbox("PawieTweaksCBDuel", "Block Duel Requests from non-friends", "blockDuels", cbColors)
+    local cbGinv = CreateCheckbox("PawieTweaksCBGinv", "Block Guild Invites from non-friends", "blockGuildInvites", cbDuel)
 
     local infoHeader = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    infoHeader:SetPoint("TOPLEFT", cbSell, "BOTTOMLEFT", 0, -25)
+    infoHeader:SetPoint("TOPLEFT", cbGinv, "BOTTOMLEFT", 0, -20)
     infoHeader:SetText("Built-in Features (Always Active)")
 
     local infoText = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     infoText:SetPoint("TOPLEFT", infoHeader, "BOTTOMLEFT", 0, -10)
     infoText:SetJustifyH("LEFT")
     infoText:SetText(
-        "• Movable Windowed Map: The World Map can be dragged, and scaled using the mouse wheel.\n" ..
+        "• Fast Buy: Hold Alt + Left Click an item at a vendor to instantly buy a full stack.\n" ..
+        "• Movable Windowed Map: The map can be dragged, and scaled using the bottom-right corner.\n" ..
         "• Map UI Cleanup: Removes the clunky default borders and dropdown menus from the map.\n" ..
-        "• Larger Player Arrow: Increases your map icon by 50% so it's easier to spot.\n" ..
         "• Chat Copy Tool: Adds a tiny button to the top right of the chat window to copy text.\n" ..
-        "• Error Filter: Silences annoying red screen text ('Not ready', 'Out of range', 'Nothing to attack').\n" ..
+        "• Error Filter: Silences annoying red screen text ('Not ready', 'Out of range').\n" ..
         "• Quick Reload: Type /rl in the chat to instantly reload your User Interface."
     )
 end
@@ -387,7 +476,6 @@ coreFrame:RegisterEvent("PLAYER_LOGIN")
 coreFrame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == addonName then
         if type(PawieTweaksDB) ~= "table" then PawieTweaksDB = {} end
-        -- Apply default settings if they are missing
         for key, value in pairs(defaultSettings) do
             if PawieTweaksDB[key] == nil then
                 PawieTweaksDB[key] = value
