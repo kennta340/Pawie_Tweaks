@@ -1,42 +1,27 @@
 # Pawie Tweaks
 
-A lightweight Quality of Life (QoL) addon for World of Warcraft 3.3.5a. Designed to remove daily annoyances and speed up your gameplay without wasting your CPU or RAM.
+A lightweight Quality of Life (QoL) addon designed to automate tedious tasks, specifically tailored for 3.3.5a clients and custom servers like Ascension WoW (CoA).
 
-## 🌟 Key Features
+> **Made by Pawie @Vol'Jin**
 
-### 🗺️ Map Tweaks
-* **Movable Windowed Map:** The World Map is now a free-moving window.
-* **UI Cleanup:** Removes the clunky default borders and zoom buttons for a clean look.
-* **Fade on Move:** The map automatically fades to 50% transparency when you move.
-* **Resize:** Use the triangle handle in the bottom-right corner to resize the map to your liking.
+## Features
 
-### ⚡ Automation (No more clicking!)
-* **Auto-Quest:** Quickly accepts and turns in quests. Holds SHIFT to pause during Escort/Event quests.
-* **Auto-Sell Junk:** Automatically sells all grey items when visiting a vendor.
-* **Auto-Confirm BoP:** Skips the confirmation prompt for Bind on Pickup items.
-* **Fast Buy:** Hold `Alt` + `Left Click` on items at a vendor to instantly buy a full stack.
-* **Skip "DELETE":** Automatically fills in "DELETE" when trying to destroy rare/epic items.
+* **Smart Auto-Questing:** Automatically accepts and turns in quests. 
+  * *Hold `SHIFT` while interacting with an NPC to temporarily pause the automation.*
+  * *Smart Escort Detection:* Pauses automatically on escort quests so you don't start them by accident.
+  * *Callboard Compatible:* Automatically pauses when interacting with custom UI boards (like Ascension's Hero's Call Board) to prevent UI freezes.
+* **Auto-BoP & Loot Rolls:** Automatically confirms "Bind on Pickup" warnings and bypasses the confirmation window when rolling Need/Greed in dungeons.
+* **Clickable Chat Invites:** Turns the words "inv" or "invite" in chat into clickable links. If you aren't the leader, it suggests the invite in party chat instead.
+* **Annoyance Blockers:** Options to automatically decline Duel Requests and Guild Invites.
+* **Skip "DELETE":** Automatically fills in the word "DELETE" when destroying superior items.
+* **Class Colors:** Forces class colors in all default chat channels.
 
-### 🛠️ Interface & Chat
-* **Clickable Invites:** "inv" and "invite" in chat become yellow, clickable links to instantly invite players to your group.
-* **Chat Class Colors:** Automatically color-codes player names in chat based on their class.
-* **Chat Copy Tool:** A small button in the top-right corner of the chat frame to copy chat text.
-* **Error Filter:** Silences annoying red error spam ("Out of range", "Not enough rage", etc.).
-* **Annoyance Blockers:** Automatically decline Duel requests and Guild invites from non-friends.
+## Commands
+Type `/pawie` in-game to see the command list:
+* `/pawie quest` - Toggles Auto-Quest accept and turn-in.
+* `/pawie duel` - Toggles blocking of duel requests.
+* `/pawie ginv` - Toggles blocking of guild invites.
+* `/pawie colors` - Toggles class colors in chat.
+* `/rl` - Reloads the UI.
 
-## 💬 Chat Commands
-Type `/pawie` in-game to see the full list of commands:
-* `/pawie fade` - Toggle map fade on move.
-* `/pawie quest` - Toggle Auto-Quest.
-* `/pawie duel` - Toggle blocking of duel requests.
-* `/pawie ginv` - Toggle blocking of guild invites.
-* `/pawie colors` - Toggle class colors in chat.
-* `/rl` - Quick command to reload your UI.
-
-## 📥 Installation
-
-1. Click the green **Code** button at the top right and select **Download ZIP**.
-2. Extract the ZIP file.
-3. ⚠️ **IMPORTANT:** Rename the folder to exactly `Pawie_Tweaks` (remove any "-main" suffix).
-4. Move the folder to: `Your-WoW-Folder\Interface\AddOns\`
-5. Restart your game.
+Alternatively, you can access the toggles through the standard Interface Options menu.
