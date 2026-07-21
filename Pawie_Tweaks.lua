@@ -1,22 +1,18 @@
 -- ==========================================
--- PAWIE TWEAKS - v1.2
+-- PAWIE TWEAKS - v1.3.7 (True Anti-Freeze & Callboard Blacklist)
 -- ==========================================
 local addonName, PT = ...
 local coreFrame = CreateFrame("Frame")
 
 -- Default settings
 local defaultSettings = {
-    scale = 1.0, 
-    fadeOnMove = true, 
     autoQuest = true,
     skipDelete = true,
     autoBoP = true,
-    autoSell = true,
     chatClassColors = true,
     clickInvite = true,
     blockDuels = false,         
-    blockGuildInvites = false,
-    enableMapTweaks = true
+    blockGuildInvites = false
 }
 
 local function ApplyChatColors(enable)
@@ -27,90 +23,6 @@ local function ApplyChatColors(enable)
     for i = 1, 10 do
         ToggleChatColorNamesByClassGroup(enable, "CHANNEL"..i)
     end
-end
-
--- ==========================================
--- MODULE: Map Tweaks
--- ==========================================
-local function InitMap()
-    if not PawieTweaksDB.enableMapTweaks then return end 
-
-    SetCVar("miniWorldMap", 1)
-    WorldMapFrame:SetMovable(true)
-    WorldMapFrame:SetUserPlaced(true)
-    WorldMapFrame:SetClampedToScreen(true)
-    
-    if PawieTweaksDB.scale then
-        WorldMapFrame:SetScale(PawieTweaksDB.scale)
-    end
-    
-    local dragFrame = CreateFrame("Frame", nil, WorldMapFrame)
-    dragFrame:SetPoint("TOPLEFT", 0, 0)
-    dragFrame:SetPoint("TOPRIGHT", 0, 0)
-    dragFrame:SetHeight(35)
-    dragFrame:EnableMouse(true)
-    dragFrame:RegisterForDrag("LeftButton")
-    dragFrame:SetScript("OnDragStart", function() WorldMapFrame:StartMoving() end)
-    dragFrame:SetScript("OnDragStop", function() WorldMapFrame:StopMovingOrSizing() end)
-
-    if WorldMapZoneMinimapDropDown then WorldMapZoneMinimapDropDown:Hide() end
-    if WorldMapZoomOutButton then WorldMapZoomOutButton:Hide() end
-    if WorldMapMagnifyingGlassButton then WorldMapMagnifyingGlassButton:Hide() end
-    if WorldMapPlayer then WorldMapPlayer:SetScale(1.5) end
-
-    local scaleHandle = CreateFrame("Frame", nil, WorldMapFrame)
-    scaleHandle:SetSize(16, 16)
-    scaleHandle:SetPoint("BOTTOMRIGHT", -10, 10)
-    scaleHandle:EnableMouse(true)
-    scaleHandle:SetFrameLevel(WorldMapFrame:GetFrameLevel() + 15)
-    scaleHandle.tex = scaleHandle:CreateTexture(nil, "OVERLAY")
-    scaleHandle.tex:SetAllPoints()
-    scaleHandle.tex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    scaleHandle.tex:SetBlendMode("ADD")
-
-    scaleHandle:SetScript("OnMouseDown", function(self, button)
-        if button == "LeftButton" then
-            self.isScaling = true
-            self.initialX, self.initialY = GetCursorPosition()
-            self.initialScale = WorldMapFrame:GetScale()
-            self:SetScript("OnUpdate", function(self)
-                local currentX, currentY = GetCursorPosition()
-                local scaleDelta = ((currentX - self.initialX) - (currentY - self.initialY)) * 0.003
-                local newScale = self.initialScale + scaleDelta
-                if newScale < 0.4 then newScale = 0.4 end
-                if newScale > 2.5 then newScale = 2.5 end
-                WorldMapFrame:SetScale(newScale)
-            end)
-        end
-    end)
-
-    scaleHandle:SetScript("OnMouseUp", function(self)
-        if self.isScaling then
-            self.isScaling = false
-            self:SetScript("OnUpdate", nil)
-            PawieTweaksDB.scale = WorldMapFrame:GetScale()
-        end
-    end)
-
-    local logicFrame = CreateFrame("Frame", nil, WorldMapFrame)
-    local updateTimer = 0
-    logicFrame:SetScript("OnUpdate", function(self, elapsed)
-        updateTimer = updateTimer + elapsed
-        if updateTimer > 0.1 then 
-            updateTimer = 0
-            if WorldMapFrame:IsVisible() then
-                if PawieTweaksDB.fadeOnMove then
-                    if GetUnitSpeed("player") > 0 then
-                        WorldMapFrame:SetAlpha(0.5)
-                    else
-                        WorldMapFrame:SetAlpha(1.0)
-                    end
-                else
-                    if WorldMapFrame:GetAlpha() ~= 1.0 then WorldMapFrame:SetAlpha(1.0) end
-                end
-            end
-        end
-    end)
 end
 
 -- ==========================================
@@ -125,37 +37,86 @@ local function InitAutoQuest()
     questFrame:RegisterEvent("QUEST_PROGRESS")
     questFrame:RegisterEvent("QUEST_COMPLETE")
     
+    local processingEvent = false
+
     questFrame:SetScript("OnEvent", function(self, ev)
         if not PawieTweaksDB.autoQuest then return end
         if IsShiftKeyDown() then return end 
+        
+        -- SYSTEMLÅS: Förhindrar att addonet triggar sig självt i en oändlig loop
+        if processingEvent then return end
+        
+        -- SVARTLISTA FÖR CALLBOARD
+        -- Kollar om målet eller NPC:n heter något med "board" eller "hero's call"
+        local npcName = string.lower(UnitName("npc") or "")
+        local targetName = string.lower(UnitName("target") or "")
+        
+        if npcName:match("board") or targetName:match("board") or npcName:match("hero's call") or targetName:match("hero's call") then 
+            return 
+        end
+        
+        -- Lås koden medan den jobbar
+        processingEvent = true
         
         if ev == "QUEST_GREETING" then
             local numActive = GetNumActiveQuests()
             for i = 1, numActive do 
                 local _, isComplete = GetActiveTitle(i)
-                if isComplete then SelectActiveQuest(i); return end
-            end
-            local numAvailable = GetNumAvailableQuests()
-            if numAvailable > 0 then SelectAvailableQuest(1); return end
-            
-        elseif ev == "GOSSIP_SHOW" then
-            local activeQuests = {GetGossipActiveQuests()}
-            if #activeQuests > 0 then
-                local index = 1
-                for i = 1, #activeQuests, 4 do
-                    if activeQuests[i+3] then SelectGossipActiveQuest(index); return end
-                    index = index + 1
+                if isComplete then 
+                    SelectActiveQuest(i)
+                    processingEvent = false
+                    return 
                 end
             end
-            local availableQuests = {GetGossipAvailableQuests()}
-            if #availableQuests > 0 then SelectGossipAvailableQuest(1); return end
+            local numAvailable = GetNumAvailableQuests()
+            if numAvailable > 0 then 
+                SelectAvailableQuest(1)
+                processingEvent = false
+                return 
+            end
+            
+        elseif ev == "GOSSIP_SHOW" then
+            -- Dynamisk uträkning för (low level) quests
+            local active = {GetGossipActiveQuests()}
+            if #active > 0 then
+                local qIndex = 1
+                local i = 1
+                while i <= #active do
+                    local nextQ = i + 1
+                    while nextQ <= #active do
+                        if type(active[nextQ]) == "string" and type(active[nextQ+1]) == "number" then
+                            break
+                        end
+                        nextQ = nextQ + 1
+                    end
+                    
+                    local isComplete = active[i+3]
+                    if isComplete == true or isComplete == 1 then
+                        SelectGossipActiveQuest(qIndex)
+                        processingEvent = false
+                        return
+                    end
+                    
+                    qIndex = qIndex + 1
+                    i = nextQ
+                end
+            end
+            
+            local available = {GetGossipAvailableQuests()}
+            if #available > 0 then 
+                SelectGossipAvailableQuest(1)
+                processingEvent = false
+                return 
+            end
             
         elseif ev == "QUEST_DETAIL" then
             local objective = string.lower(GetObjectiveText() or "")
             local text = string.lower(GetQuestText() or "")
             if string.find(objective, "escort") or string.find(objective, "protect") or string.find(text, "escort") then
                 print("|cff00ff00Pawie Tweaks:|r Escort quest detected. Auto-accept paused.")
-            else AcceptQuest() end
+            else 
+                AcceptQuest() 
+            end
             
         elseif ev == "QUEST_ACCEPT_CONFIRM" then
             print("|cff00ff00Pawie Tweaks:|r Event warning detected. Auto-accept paused.")
@@ -164,6 +125,9 @@ local function InitAutoQuest()
         elseif ev == "QUEST_COMPLETE" then
             if GetNumQuestChoices() <= 1 then GetQuestReward(1) end
         end
+
+        -- Lås upp när koden är klar
+        processingEvent = false
     end)
 end
 
@@ -245,29 +209,30 @@ local function InitQoL()
     
     local bopFrame = CreateFrame("Frame")
     bopFrame:RegisterEvent("LOOT_BIND_CONFIRM")
-    bopFrame:SetScript("OnEvent", function(self, event, slot)
-        if PawieTweaksDB.autoBoP then ConfirmLootSlot(slot); StaticPopup_Hide("LOOT_BIND") end
-    end)
-    
-    local sellFrame = CreateFrame("Frame")
-    sellFrame:RegisterEvent("MERCHANT_SHOW")
-    sellFrame:SetScript("OnEvent", function()
-        if not PawieTweaksDB.autoSell then return end
-        local total = 0
-        for b = 0, 4 do
-            for s = 1, GetContainerNumSlots(b) do
-                local link = GetContainerItemLink(b, s)
-                if link then
-                    local _, _, rarity, _, _, _, _, _, _, _, itemPrice = GetItemInfo(link)
-                    if rarity == 0 and itemPrice > 0 then
-                        local count = select(2, GetContainerItemInfo(b, s))
-                        total = total + (itemPrice * count)
-                        UseContainerItem(b, s)
-                    end
-                end
-            end
+    bopFrame:RegisterEvent("CONFIRM_LOOT_ROLL")
+
+    local bopPending = {}
+    local bopDelay = CreateFrame("Frame")
+    bopDelay:Hide()
+    bopDelay:SetScript("OnUpdate", function(self)
+        self:Hide()
+        for slot in pairs(bopPending) do
+            LootSlot(slot)
+            bopPending[slot] = nil
         end
-        if total > 0 then print("|cff00ff00Pawie Tweaks:|r Sold junk for " .. GetCoinTextureString(total) .. ".") end
+    end)
+
+    bopFrame:SetScript("OnEvent", function(self, event, arg1, arg2)
+        if not PawieTweaksDB.autoBoP then return end
+        if event == "LOOT_BIND_CONFIRM" then
+            ConfirmLootSlot(arg1)
+            StaticPopup_Hide("LOOT_BIND")
+            bopPending[arg1] = true
+            bopDelay:Show()
+        elseif event == "CONFIRM_LOOT_ROLL" then
+            ConfirmLootRoll(arg1, arg2)
+            StaticPopup_Hide("CONFIRM_LOOT_ROLL")
+        end
     end)
 
     ApplyChatColors(PawieTweaksDB.chatClassColors)
@@ -297,10 +262,15 @@ local function InitQoL()
     function SetItemRef(link, text, button, chatFrame)
         local linkType, target = strsplit(":", link)
         if linkType == "pawieinv" then
-            if IsPartyLeader() or not IsInGroup() then
-                InviteUnit(target); print("|cff00ff00Pawie Tweaks:|r Invited " .. target .. ".")
+            local inGroup = GetNumPartyMembers() > 0 or GetNumRaidMembers() > 0
+            local isLeader = IsPartyLeader()
+            
+            if not inGroup or isLeader then
+                InviteUnit(target)
+                print("|cff00ff00Pawie Tweaks:|r Invited " .. target .. ".")
             else
-                DoInvite(target); print("|cff00ff00Pawie Tweaks:|r Suggested invite for " .. target .. " to the party leader.")
+                SendChatMessage("Can we invite " .. target .. "?", "PARTY")
+                print("|cff00ff00Pawie Tweaks:|r Suggested invite for " .. target .. " in party chat.")
             end
             return
         end
@@ -345,14 +315,7 @@ local function InitMenuAndCommands()
         msg = string.lower(msg or "")
         msg = msg:match("^%s*(.-)%s*$")
         
-        if msg == "map" then
-            PawieTweaksDB.enableMapTweaks = not PawieTweaksDB.enableMapTweaks
-            print("|cff00ff00Pawie Tweaks:|r Map Tweaks are now " .. (PawieTweaksDB.enableMapTweaks and "ON" or "OFF") .. ". Type /rl to apply!")
-            if PT_CBMap then PT_CBMap:SetChecked(PawieTweaksDB.enableMapTweaks) end
-        elseif msg == "fade" then
-            PawieTweaksDB.fadeOnMove = not PawieTweaksDB.fadeOnMove
-            print("|cff00ff00Pawie Tweaks:|r Fade on move is now " .. (PawieTweaksDB.fadeOnMove and "ON" or "OFF") .. ".")
-        elseif msg == "quest" then
+        if msg == "quest" then
             PawieTweaksDB.autoQuest = not PawieTweaksDB.autoQuest
             print("|cff00ff00Pawie Tweaks:|r Auto-Quest is now " .. (PawieTweaksDB.autoQuest and "ON" or "OFF") .. ".")
         elseif msg == "duel" then
@@ -366,7 +329,12 @@ local function InitMenuAndCommands()
             ApplyChatColors(PawieTweaksDB.chatClassColors)
             print("|cff00ff00Pawie Tweaks:|r Chat Class Colors are now " .. (PawieTweaksDB.chatClassColors and "ON" or "OFF") .. ".")
         else
-            print("|cff00ff00Pawie Tweaks Commands:|r /pawie map, fade, quest, duel, ginv, colors, /rl")
+            print("|cff00ff00Pawie Tweaks Commands:|r")
+            print("  |cffffff00/pawie quest|r - Toggles Auto-Quest accept and turn-in.")
+            print("  |cffffff00/pawie duel|r - Toggles blocking of duel requests.")
+            print("  |cffffff00/pawie ginv|r - Toggles blocking of guild invites.")
+            print("  |cffffff00/pawie colors|r - Toggles class colors in chat.")
+            print("  |cffffff00/rl|r - Reloads the UI.")
         end
     end
 
@@ -378,7 +346,7 @@ local function InitMenuAndCommands()
     title:SetPoint("TOPLEFT", 16, -16); title:SetText("Pawie Tweaks Settings")
     local desc = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8); desc:SetJustifyH("LEFT")
-    desc:SetText("A lightweight addon to improve your World Map and automate tedious tasks.")
+    desc:SetText("A lightweight addon to automate tedious tasks.")
 
     local optHeader = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     optHeader:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -20); optHeader:SetText("Togglable Settings")
@@ -395,14 +363,11 @@ local function InitMenuAndCommands()
         return cb
     end
 
-    local cbMap = CreateCB("PT_CBMap", "Enable Map Tweaks (Uncheck to fix compatibility issues)", "enableMapTweaks", optHeader)
-    cbMap:SetPoint("TOPLEFT", optHeader, "BOTTOMLEFT", 0, -8)
-    local cbQuest = CreateCB("PT_CBQuest", "Auto-Quest (Accepts/Turns in quests. Hold SHIFT to pause)", "autoQuest", cbMap)
-    local cbFade = CreateCB("PT_CBFade", "Fade Map on Move", "fadeOnMove", cbQuest)
-    local cbDelete = CreateCB("PT_CBDelete", "Skip 'DELETE' typing", "skipDelete", cbFade)
-    local cbBoP = CreateCB("PT_CBBoP", "Auto-Confirm Bind on Pickup loot", "autoBoP", cbDelete)
-    local cbSell = CreateCB("PT_CBSell", "Auto-Sell Junk", "autoSell", cbBoP)
-    local cbInvite = CreateCB("PT_CBInvite", "Clickable Invites in Chat", "clickInvite", cbSell)
+    local cbQuest = CreateCB("PT_CBQuest", "Auto-Quest (Accepts/Turns in quests. Hold SHIFT to pause)", "autoQuest", optHeader)
+    cbQuest:SetPoint("TOPLEFT", optHeader, "BOTTOMLEFT", 0, -8)
+    local cbDelete = CreateCB("PT_CBDelete", "Skip 'DELETE' typing", "skipDelete", cbQuest)
+    local cbBoP = CreateCB("PT_CBBoP", "Auto-Confirm Bind on Pickup & Loot Rolls", "autoBoP", cbDelete)
+    local cbInvite = CreateCB("PT_CBInvite", "Clickable Invites in Chat", "clickInvite", cbBoP)
     local cbColors = CreateCB("PT_CBColors", "Class Colors in Chat", "chatClassColors", cbInvite, function(val) ApplyChatColors(val) end)
     local cbDuel = CreateCB("PT_CBDuel", "Block Duel Requests", "blockDuels", cbColors)
     local cbGinv = CreateCB("PT_CBGinv", "Block Guild Invites", "blockGuildInvites", cbDuel)
@@ -421,7 +386,6 @@ coreFrame:SetScript("OnEvent", function(self, event, arg1)
             if PawieTweaksDB[key] == nil then PawieTweaksDB[key] = value end
         end
     elseif event == "PLAYER_LOGIN" then
-        InitMap()
         InitAutoQuest()
         InitQoL()
         InitMenuAndCommands()
